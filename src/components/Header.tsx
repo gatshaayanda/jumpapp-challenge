@@ -91,7 +91,7 @@ export default function Header() {
           {!user ? (
             <Link
               href="/login"
-              className="px-4 py-1.5 rounded bg-black text-white text-sm font-medium hover:opacity-80 transition"
+              className="px-4 py-1.5 rounded text-white text-sm font-medium hover:opacity-80 transition"
             >
               Log In
             </Link>

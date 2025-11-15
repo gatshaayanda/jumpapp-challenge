@@ -1,76 +1,44 @@
-import { NextResponse } from 'next/server';
-import { adminDb } from '@/utils/firebaseAdmin';
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { uid, eventId, joinUrl, startTime } = body;
+    const { meetingUrl, joinAt, userId, eventId } = await req.json();
 
-    if (!uid || !eventId || !joinUrl || !startTime) {
-      return NextResponse.json({
-        error: 'Missing required fields'
-      }, { status: 400 });
+    if (!process.env.RECALL_API_KEY) {
+      throw new Error("Missing RECALL_API_KEY");
     }
 
-    const API_KEY = process.env.RECALL_API_KEY;
-    if (!API_KEY) {
-      return NextResponse.json({
-        error: 'Missing Recall API key'
-      }, { status: 500 });
-    }
+    const res = await fetch(
+      `https://${process.env.RECALL_REGION}.recall.ai/api/v1/bot`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${process.env.RECALL_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          meeting_url: meetingUrl,
+          join_at: new Date(joinAt).toISOString(),
+          bot_name: "Jump Challenge Notetaker",
+          metadata: {
+            userId,
+            eventId
+          },
+          recording_config: {
+            transcript: {
+              provider: { meeting_captions: {} },
+            }
+          }
+        }),
+      }
+    );
 
-    // Convert startTime (ISO or ms) → UNIX seconds
-    const unixStart = Math.floor(startTime / 1000);
+    const json = await res.json();
+    console.log("BOT CREATED:", json);
 
-    // Join minutes offset
-    const userDoc = await adminDb.collection('users').doc(uid).get();
-    const joinMinutes = userDoc.data()?.joinMinutes || 5;
-    const joinAt = unixStart - joinMinutes * 60;
-
-    // Send to Recall.ai
-    const r = await fetch('https://api.recall.ai/api/v1/bot', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        join_url: joinUrl,
-        start_time: joinAt,
-        end_behavior: 'end_of_meeting',
-        recording: {
-          audio: true,
-          video: false
-        }
-      })
-    });
-
-    const data = await r.json();
-    if (!r.ok) {
-      console.error('Recall error:', data);
-      return NextResponse.json({ error: 'Recall bot creation failed', detail: data }, { status: 500 });
-    }
-
-    const botId = data.id;
-
-    // Save meeting metadata in Firestore
-    await adminDb
-      .collection('meeting_metadata')
-      .doc(eventId)
-      .set({
-        userId: uid,
-        botId,
-        joinUrl,
-        startTime,
-        status: 'waiting',
-        createdAt: Date.now()
-      }, { merge: true });
-
-    return NextResponse.json({ success: true, botId });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({
-      error: 'Internal error creating bot'
-    }, { status: 500 });
+    return NextResponse.json({ botId: json.id });
+  } catch (err: any) {
+    console.error("create-bot error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

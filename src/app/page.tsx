@@ -30,7 +30,7 @@ export default function HomePage() {
             <div className="flex flex-wrap gap-3 pt-2">
               <Link
                 href="/dashboard"
-                className="px-5 py-2.5 rounded-full bg-black text-white text-sm font-semibold hover:opacity-85 transition"
+                className="px-5 py-2.5 rounded-full  text-white text-sm font-semibold hover:opacity-85 transition"
               >
                 Open dashboard
               </Link>

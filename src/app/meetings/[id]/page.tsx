@@ -50,24 +50,28 @@ export default function MeetingDetailPage() {
   };
 
   const handlePost = async () => {
-    try {
-      const res = await fetch('/api/post-to-social', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meetingId: id,
-          content: meeting?.socialPostDraft,
-          platform: meeting?.automationPlatform || 'linkedin',
-        }),
-      });
+    if (!meeting) return;
 
-      if (res.ok) {
-        alert('Posted successfully!');
-      } else {
-        alert('Post failed.');
-      }
-    } catch (err) {
-      alert('Error posting.');
+    const platform = meeting.automationPlatform || 'linkedin';
+
+    const url =
+      platform === 'facebook'
+        ? '/api/social/facebook/post'
+        : '/api/social/linkedin/post';
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: meeting.userId,
+        content: meeting.socialPostDraft,
+      }),
+    });
+
+    if (res.ok) {
+      alert('Posted successfully!');
+    } else {
+      alert('Failed to post. Check OAuth tokens.');
     }
   };
 
@@ -95,7 +99,7 @@ export default function MeetingDetailPage() {
 
   return (
     <main className="px-6 py-8 max-w-4xl mx-auto space-y-10">
-      {/* Back Button */}
+      {/* Back */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-sm text-gray-700 hover:text-black"
@@ -132,7 +136,7 @@ export default function MeetingDetailPage() {
         </div>
       </section>
 
-      {/* FOLLOW-UP EMAIL DRAFT */}
+      {/* FOLLOW-UP EMAIL */}
       <section>
         <h2 className="text-lg font-medium mb-3 flex items-center gap-2">
           <Mail size={18} /> Follow-up Email (AI Generated)
@@ -150,7 +154,7 @@ export default function MeetingDetailPage() {
         </button>
       </section>
 
-      {/* SOCIAL MEDIA POST DRAFT */}
+      {/* SOCIAL POST */}
       <section>
         <h2 className="text-lg font-medium mb-2 flex items-center gap-2">
           <Sparkles size={18} /> Social Media Post Draft
@@ -181,7 +185,7 @@ export default function MeetingDetailPage() {
         )}
       </section>
 
-      {/* AUTOMATIONS SHOWCASE */}
+      {/* AUTOMATIONS */}
       <section className="pt-4">
         <h2 className="text-lg font-medium mb-2 flex items-center gap-2">
           <Sparkles size={18} /> Automations Triggered

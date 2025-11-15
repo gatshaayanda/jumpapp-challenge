@@ -14,9 +14,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
 
+  // LOAD USER + SETTINGS
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
-      if (!u) router.replace('/login');
+      if (!u) {
+        router.replace('/login');
+        return;
+      }
+
       setUser(u);
       loadSettings(u);
     });
@@ -32,7 +37,9 @@ export default function SettingsPage() {
     }
   }
 
+  // SAVE SETTINGS
   async function saveSettings() {
+    if (!user) return;
     setSaving(true);
     setStatus('');
 
@@ -45,21 +52,21 @@ export default function SettingsPage() {
       }),
     });
 
-    if (res.ok) {
-      setStatus('Saved ✓');
-    } else {
-      setStatus('Error saving');
-    }
+    if (res.ok) setStatus('Saved ✓');
+    else setStatus('Error saving');
 
     setSaving(false);
   }
 
+  // OAUTH CONNECTIONS
   function connectLinkedIn() {
-    window.location.href = '/api/oauth/linkedin/start';
+    if (!user) return;
+    window.location.href = `/api/oauth/linkedin/start?uid=${user.uid}`;
   }
 
   function connectFacebook() {
-    window.location.href = '/api/oauth/facebook/start';
+    if (!user) return;
+    window.location.href = `/api/oauth/facebook/start?uid=${user.uid}`;
   }
 
   return (

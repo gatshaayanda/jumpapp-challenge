@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-export default function ScentsSuitesLoader() {
+export default function JumpappLoader() {
   const [visible, setVisible] = useState(true);
-  const [fading, setFading] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
-    const fade = setTimeout(() => setFading(true), 2300);
-    const hide = setTimeout(() => setVisible(false), 3100);
+    const fadeTimer = setTimeout(() => setFadeOut(true), 1500);
+    const hideTimer = setTimeout(() => setVisible(false), 2200);
     return () => {
-      clearTimeout(fade);
-      clearTimeout(hide);
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
     };
   }, []);
 
@@ -20,138 +20,110 @@ export default function ScentsSuitesLoader() {
   return (
     <div
       role="status"
-      aria-label="Loading Scents & Suites"
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-[1200ms] ${
-        fading ? 'opacity-0' : 'opacity-100'
+      aria-label="Loading Jumpapp"
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-[900ms] ${
+        fadeOut ? "opacity-0" : "opacity-100"
       }`}
       style={{
-        background:
-          'radial-gradient(circle at 50% 50%, #4C1F26, #2a1b1b 70%, #1a1212 100%)',
-        backgroundSize: '200% 200%',
-        animation: 'bgFlow 8s cubic-bezier(0.45,0,0.25,1) infinite',
-        color: '#fff',
-        fontFamily: 'var(--font-serif)',
+        background: "#ffffff",
+        color: "#111",
+        fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Perfume Droplet */}
-      <div className="relative h-28 w-28 mb-6">
-        {/* Subtle Reflection */}
-        <svg
-          viewBox="0 0 64 64"
-          className="absolute inset-0 opacity-25 blur-sm scale-y-[-1] translate-y-8"
-        >
-          <path
-            d="M32 2C26 12 16 24 16 36c0 8.8 7.2 16 16 16s16-7.2 16-16c0-12-10-24-16-34Z"
-            fill="#B89B59"
-          />
-        </svg>
+      {/* AI Pulse Icon */}
+      <div className="relative h-24 w-24 mb-6 flex items-center justify-center">
+        <div className="absolute inset-0 rounded-full bg-blue-500 opacity-20 animate-ping"></div>
 
-        {/* Main Droplet */}
         <svg
-          viewBox="0 0 64 64"
-          width="112"
-          height="112"
-          className="animate-float drop-glow"
+          width="64"
+          height="64"
+          viewBox="0 0 24 24"
+          className="text-blue-600 animate-ai"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
         >
-          <defs>
-            <radialGradient id="dropGlow" cx="50%" cy="40%" r="50%">
-              <stop offset="0%" stopColor="#FFE6A3" stopOpacity="0.9">
-                <animate
-                  attributeName="offset"
-                  values="0;0.4;0"
-                  dur="8s"
-                  repeatCount="indefinite"
-                />
-              </stop>
-              <stop offset="100%" stopColor="#B89B59" />
-            </radialGradient>
-          </defs>
-          <path
-            d="M32 2C26 12 16 24 16 36c0 8.8 7.2 16 16 16s16-7.2 16-16c0-12-10-24-16-34Z"
-            fill="url(#dropGlow)"
-            stroke="white"
-            strokeWidth="1.5"
-          />
+          <path d="M12 2c4 0 8 3 8 8s-4 8-8 8-8-3-8-8 4-8 8-8z" />
+          <circle cx="12" cy="10" r="3" />
+          <path d="M12 13v4" />
         </svg>
       </div>
 
-      {/* Wordmark */}
-      <div
-        className="text-white uppercase tracking-[0.5em] text-[1.6rem] fade-in-text"
-        style={{
-          fontFamily: 'Cormorant Garamond, serif',
-          fontWeight: 600,
-        }}
-      >
-        Scents & Suites
+      {/* App Name */}
+      <div className="text-2xl font-semibold tracking-wide fade-in">
+        JUMPAPP
       </div>
 
       {/* Tagline */}
-      <div
-        className="text-sm mt-2 text-[#D6B678] tracking-widest fade-in-delayed"
-        style={{
-          fontFamily: 'Montserrat, sans-serif',
-          letterSpacing: '0.25em',
-        }}
-      >
-        Where Elegance Has a Scent
+      <div className="text-sm text-gray-600 mt-1 fade-in-delayed">
+        Generating your meeting content…
       </div>
 
-      {/* Progress shimmer bar */}
-      <div
-        className="w-48 h-1.5 bg-white/10 overflow-hidden rounded-full mt-8"
-        aria-hidden="true"
-      >
-        <span
-          className="block h-full w-1/3 shimmer"
-          style={{ background: 'linear-gradient(90deg,#B89B59,#D6B678,#B89B59)' }}
-        />
+      {/* Progress Bar */}
+      <div className="w-48 h-1.5 bg-gray-200 rounded-full mt-8 overflow-hidden">
+        <div className="h-full w-1/3 loader-bar"></div>
       </div>
 
       {/* Styles */}
       <style jsx>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-150%); }
-          50% { transform: translateX(30%); }
-          100% { transform: translateX(150%); }
-        }
-        .shimmer {
-          animation: shimmer 2.2s cubic-bezier(0.45,0,0.25,1) infinite;
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        .animate-float {
-          animation: float 4.5s cubic-bezier(0.45,0,0.25,1) infinite;
+        @keyframes loaderBar {
+          0% {
+            transform: translateX(-150%);
+          }
+          50% {
+            transform: translateX(20%);
+          }
+          100% {
+            transform: translateX(150%);
+          }
         }
 
-        @keyframes bgFlow {
-          0%, 100% { background-position: 50% 50%; }
-          50% { background-position: 55% 60%; }
+        .loader-bar {
+          background: linear-gradient(90deg, #2563eb, #60a5fa, #2563eb);
+          animation: loaderBar 1.8s cubic-bezier(0.45, 0, 0.25, 1) infinite;
         }
 
-        .drop-glow {
-          filter: drop-shadow(0 0 10px rgba(184,155,89,0.55))
-                  drop-shadow(0 0 18px rgba(214,182,120,0.25));
-          transition: filter 1s ease;
+        @keyframes aiPulse {
+          0% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.08);
+          }
+          100% {
+            transform: scale(1);
+          }
         }
 
-        @keyframes fadeInText {
-          0% { opacity: 0; letter-spacing: 0.4em; transform: translateY(6px); }
-          100% { opacity: 1; letter-spacing: 0.15em; transform: translateY(0); }
+        .animate-ai {
+          animation: aiPulse 2.4s ease-in-out infinite;
         }
-        .fade-in-text {
-          animation: fadeInText 1.6s cubic-bezier(0.45,0,0.25,1) forwards;
+
+        @keyframes fadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
+
+        .fade-in {
+          animation: fadeIn 1s ease forwards;
+        }
+
         .fade-in-delayed {
           opacity: 0;
-          animation: fadeInText 1.6s cubic-bezier(0.45,0,0.25,1) 0.5s forwards;
+          animation: fadeIn 1s ease 0.3s forwards;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          * { animation: none !important; transition: none !important; }
+          * {
+            animation: none !important;
+            transition: none !important;
+          }
         }
       `}</style>
     </div>

@@ -1,23 +1,20 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/utils/firebaseAdmin';
+import { firestore } from '@/utils/firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
-    const uid = searchParams.get('state'); // received from ?state=
+    const uid = searchParams.get('state');
 
-    if (!code) {
-      return NextResponse.json({ error: 'Missing code' }, { status: 400 });
-    }
-
-    if (!uid) {
-      return NextResponse.json({ error: 'Missing uid/state' }, { status: 400 });
+    if (!code || !uid) {
+      return NextResponse.json({ error: 'Missing code or uid' }, { status: 400 });
     }
 
     const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/oauth/linkedin/callback`;
 
-    // 1. Exchange code → access token
+    // 1. Exchange code for token
     const tokenRes = await fetch(
       "https://www.linkedin.com/oauth/v2/accessToken",
       {
@@ -41,36 +38,27 @@ export async function GET(req: Request) {
 
     const accessToken = tokenJson.access_token;
 
-    // 2. Fetch LinkedIn profile ID (used to post as user)
+    // 2. Fetch profile → get LinkedIn URN
     const profileRes = await fetch(
       "https://api.linkedin.com/v2/me?projection=(id)",
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     const profileJson = await profileRes.json();
-
     if (!profileJson.id) {
-      return NextResponse.json({ error: 'Missing profile id', details: profileJson });
+      return NextResponse.json({ error: "Profile fetch failed", details: profileJson });
     }
 
-    const personId = profileJson.id;
+    const urn = `urn:li:person:${profileJson.id}`;
 
-    // 3. Save tokens in Firestore
-    await adminDb.collection("users").doc(uid).set(
-      {
-        linkedin: {
-          accessToken,
-          personId,
-        },
-      },
-      { merge: true }
-    );
+    // 3. Save to Firestore
+    await setDoc(doc(firestore, "user_oauth", uid), {
+      linkedinAccessToken: accessToken,
+      linkedinUrn: urn,
+    }, { merge: true });
 
     return NextResponse.redirect("/settings?linkedin=connected");
   } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "OAuth error", err }, { status: 500 });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
