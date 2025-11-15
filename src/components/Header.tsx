@@ -6,15 +6,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Menu, X, LogOut } from 'lucide-react';
 import LogoMktMark from '@/components/LogoMktMark';
 import LogoMkt from '@/components/LogoMkt';
-import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
 
-/* Firebase Init */
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-};
-initializeApp(firebaseConfig);
+// ❌ REMOVE ALL Firebase app initialization here
+// ✅ Instead, import the already-initialized shared instance:
+import { auth } from '@/utils/firebaseConfig';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 /* Top Navigation */
 const NAV = [
@@ -29,8 +25,8 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
 
+  /* Auth listener */
   useEffect(() => {
-    const auth = getAuth();
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
@@ -41,7 +37,7 @@ export default function Header() {
 
   const handleLogout = async () => {
     try {
-      await signOut(getAuth());
+      await signOut(auth);
       router.push('/login');
     } catch {}
   };
@@ -61,17 +57,14 @@ export default function Header() {
       {/* Main Row */}
       <div className="container flex items-center justify-between py-3">
 
-        {/* Left: Logo + Wordmark */}
+        {/* Logo */}
         <Link
           href="/dashboard"
           onClick={closeMenu}
           aria-label="MeetingPost AI — Home"
           className="flex items-center gap-3 select-none"
         >
-          {/* icon */}
           <LogoMktMark className="h-8 w-8" />
-
-          {/* wordmark */}
           <LogoMkt className="h-6" />
         </Link>
 
@@ -125,6 +118,7 @@ export default function Header() {
         >
           {open ? <X size={24} /> : <Menu size={24} />}
         </button>
+
       </div>
 
       {/* Mobile Drawer */}
