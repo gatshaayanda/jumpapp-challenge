@@ -15,9 +15,7 @@ export default function ChatWidget() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  /* -----------------------------
-     Load/save chat history
-  ----------------------------- */
+  /* Load/save chat history */
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -36,9 +34,7 @@ export default function ChatWidget() {
     if (open) setUnread(0);
   }, [messages, open]);
 
-  /* --------------------------------
-     Welcome message on first open
-  -------------------------------- */
+  /* Welcome message */
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([
@@ -57,17 +53,11 @@ export default function ChatWidget() {
     }
   }, [open, messages.length]);
 
-  /* -----------------------------
-     Bot message utility
-  ----------------------------- */
   const pushBot = (text: string, sugg?: string[]) => {
     setMessages((prev) => [...prev, { sender: 'bot', text }]);
     setSuggestions(sugg || []);
   };
 
-  /* -----------------------------
-     Handle sending
-  ----------------------------- */
   async function sendMessage(over?: string) {
     const text = (over ?? input).trim();
     if (!text) return;
@@ -84,7 +74,9 @@ export default function ChatWidget() {
       });
 
       const data = await res.json();
-      const reply = data?.reply?.trim() || "I'm not sure yet — but I can help with meetings, transcripts, or social posts.";
+      const reply =
+        data?.reply?.trim() ||
+        "I'm not sure yet — but I can help with meetings, transcripts, or social posts.";
       pushBot(reply, data?.suggestions || []);
     } catch {
       pushBot("Hmm, something went wrong — try another question.");
@@ -95,17 +87,13 @@ export default function ChatWidget() {
 
   const onSuggestion = (s: string) => sendMessage(s);
 
-  /* -----------------------------
-     UI
-  ----------------------------- */
   return (
     <>
       {/* Launcher */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-black text-white 
-                     flex items-center justify-center shadow-lg hover:opacity-80 transition"
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-black text-white flex items-center justify-center shadow-lg hover:opacity-80 transition"
           aria-label="Open chat"
         >
           💬
@@ -126,7 +114,6 @@ export default function ChatWidget() {
             height: '28rem',
           }}
         >
-          {/* Header */}
           <div className="px-4 py-3 bg-black text-white flex items-center justify-between">
             <div className="font-semibold text-sm">MeetingPost Assistant</div>
             <button
@@ -137,7 +124,6 @@ export default function ChatWidget() {
             </button>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm bg-white">
             {messages.map((m, i) => {
               const isUser = m.sender === 'user';
@@ -172,7 +158,6 @@ export default function ChatWidget() {
             <div ref={bottomRef} />
           </div>
 
-          {/* Suggestions */}
           {suggestions.length > 0 && (
             <div className="px-3 py-2 border-t border-[--border] bg-white flex flex-wrap gap-2">
               {suggestions.map((s, i) => (
@@ -187,7 +172,6 @@ export default function ChatWidget() {
             </div>
           )}
 
-          {/* Input */}
           <div className="flex p-3 border-t border-[--border] bg-white gap-2">
             <input
               value={input}
@@ -206,7 +190,6 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* Animations */}
       <style jsx global>{`
         @keyframes typing {
           0%, 80%, 100% { transform: scale(0); opacity: 0.3; }

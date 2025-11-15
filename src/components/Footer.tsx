@@ -10,9 +10,7 @@ export default function Footer() {
     <footer className="mt-12 text-[--foreground] bg-[--brand-primary] relative overflow-hidden">
 
       {/* Gold shimmer top line */}
-      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r 
-          from-[--brand-secondary]/40 via-[--brand-secondary]/80 to-[--brand-secondary]/40 
-          animate-goldflow" />
+      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-[--brand-secondary]/40 via-[--brand-secondary]/80 to-[--brand-secondary]/40 animate-goldflow" />
 
       <div className="container grid gap-10 sm:grid-cols-2 lg:grid-cols-3 py-12 text-sm relative z-10">
 
@@ -68,7 +66,7 @@ export default function Footer() {
             </a>
 
             <a
-              href="https://jumpcut.com" 
+              href="https://jumpcut.com"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 hover:text-[--brand-secondary] transition"
