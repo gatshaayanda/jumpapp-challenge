@@ -90,7 +90,8 @@ export default function Dashboard() {
           >
             <div className="flex items-center gap-3 mb-3">
               {s.icon}
-              <h2 className="text-lg font-semibold">{s.title}</h2>
+              {/* ⬇️ THE ONLY LINE CHANGED — force title to full white */}
+              <h2 className="text-lg font-semibold text-white !text-white">{s.title}</h2>
             </div>
             <p className="text-sm opacity-90">{s.desc}</p>
           </button>

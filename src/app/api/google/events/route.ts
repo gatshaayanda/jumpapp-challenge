@@ -16,48 +16,70 @@ async function refreshToken(refresh_token: string) {
 }
 
 export async function GET(req: Request) {
-  const cookie = req.headers.get("cookie") || "";
-  const cookies = Object.fromEntries(
-    cookie
-      .split(";")
-      .map((c) => c.trim().split("="))
-      .map(([k, ...v]) => [k, decodeURIComponent(v.join("="))])
-  );
+  try {
+    const cookieHeader = req.headers.get("cookie") || "";
+    const cookies = Object.fromEntries(
+      cookieHeader
+        .split(";")
+        .map((c) => c.trim().split("="))
+        .map(([k, ...v]) => [k, decodeURIComponent(v.join("="))])
+    );
 
-  if (!cookies.google_tokens) {
-    return NextResponse.json({ events: [] });
-  }
-
-  let tokens = JSON.parse(cookies.google_tokens);
-
-  // Refresh expired tokens
-  if (Date.now() > tokens.expires_in - 5000) {
-    const refreshed = await refreshToken(tokens.refresh_token);
-    tokens.access_token = refreshed.access_token;
-    tokens.expires_in = Date.now() + refreshed.expires_in * 1000;
-  }
-
-  // Fetch events
-  const now = new Date().toISOString();
-  const maxTime = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString(); // 2 weeks
-
-  const google = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${new URLSearchParams(
-      {
-        timeMin: now,
-        timeMax: maxTime,
-        singleEvents: "true",
-        orderBy: "startTime",
-      }
-    )}`,
-    {
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
+    if (!cookies.google_tokens) {
+      return NextResponse.json({ events: [] });
     }
-  );
 
-  const data = await google.json();
+    let tokens = JSON.parse(cookies.google_tokens);
 
-  return NextResponse.json({ events: data.items || [] });
+    // If expired — refresh
+    if (Date.now() > tokens.expires_in - 5000) {
+      const refreshed = await refreshToken(tokens.refresh_token);
+      tokens.access_token = refreshed.access_token;
+      tokens.expires_in = Date.now() + refreshed.expires_in * 1000;
+    }
+
+    // Fetch ALL future events (no 2-week limit)
+    const now = new Date().toISOString();
+    const maxTime = new Date("2100-01-01T00:00:00Z").toISOString();
+
+    const params = new URLSearchParams({
+      timeMin: now,
+      timeMax: maxTime,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "2500",
+    });
+
+    const googleRes = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      }
+    );
+
+    const data = await googleRes.json();
+
+    if (!data.items) {
+      console.log("Google returned:", data);
+      return NextResponse.json({ events: [] });
+    }
+
+    // Convert ALL-DAY events to a safe format
+    const events = data.items.map((e: any) => ({
+      id: e.id,
+      summary: e.summary || "Untitled Event",
+      start: {
+        dateTime: e.start?.dateTime || e.start?.date || null,
+      },
+      hangoutLink: e.hangoutLink,
+      conferenceData: e.conferenceData,
+    }));
+
+    return NextResponse.json({ events });
+  } catch (error: any) {
+    console.error("Google Events Error:", error);
+    return NextResponse.json({ events: [], error: error.message });
+  }
 }

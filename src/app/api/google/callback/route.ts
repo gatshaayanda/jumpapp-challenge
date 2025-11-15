@@ -23,21 +23,16 @@ export async function GET(req: Request) {
   const tokens = await tokenRes.json();
 
   if (!tokens.access_token) {
-    return NextResponse.json(
-      { error: "OAuth error", tokens },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "OAuth failed", tokens }, { status: 400 });
   }
 
-  // Store tokens in HTTP-only cookie
-  const res = NextResponse.redirect("/dashboard");
-  res.cookies.set({
-    name: "google_tokens",
-    value: JSON.stringify({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_in: Date.now() + tokens.expires_in * 1000,
-    }),
+  const res = NextResponse.redirect("/events");
+
+  res.cookies.set("google_tokens", JSON.stringify({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_in: Date.now() + tokens.expires_in * 1000,
+  }), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
