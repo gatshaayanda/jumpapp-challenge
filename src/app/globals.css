@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/* ------------------------------------
+   Global Variables — BLACK & WHITE ONLY
+-------------------------------------- */
+:root {
+  --background: #ffffff;       /* White */
+  --foreground: #111111;       /* Near black */
+
+  --surface: #f7f7f7;          /* Light grey for cards/panels */
+  --border: #e5e5e5;           /* Subtle grey borders */
+
+  --accent: #000000;           /* All accents = black */
+  --accent-muted: #555555;     /* Muted grey */
+
+  --font-sans: 'Montserrat', sans-serif;
+  --font-serif: 'Cormorant Garamond', serif;
+}
+
+/* Optional dark theme (still clean) */
+[data-theme="dark"] {
+  --background: #111111;
+  --foreground: #f5f5f5;
+
+  --surface: #1a1a1a;
+  --border: #333333;
+
+  --accent: #ffffff;
+  --accent-muted: #bbbbbb;
+}
+
+/* ------------------------------------
+   Base
+-------------------------------------- */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+h1, h2, h3, h4 {
+  color: var(--foreground);
+  font-family: var(--font-serif);
+  font-weight: 600;
+}
+
+/* ------------------------------------
+   Links
+-------------------------------------- */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+a:hover,
+a:focus {
+  opacity: 0.7;
+  outline: none;
+}
+
+/* ------------------------------------
+   Buttons
+-------------------------------------- */
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.4rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+button:hover,
+button:focus {
+  opacity: 0.85;
+}
+
+/* ------------------------------------
+   Cards
+-------------------------------------- */
+.card {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1.4rem;
+}
+
+/* ------------------------------------
+   Inputs
+-------------------------------------- */
+.form-input {
+  width: 100%;
+  background: white;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  border-radius: 0.4rem;
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
+  outline: none;
+}
+
+/* ------------------------------------
+   Menu Links
+-------------------------------------- */
+.menu-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  color: var(--foreground);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.menu-link:hover,
+.menu-link:focus {
+  background: var(--surface);
+  opacity: 0.7;
+  border-radius: 0.4rem;
+}
