@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const redirect = process.env.GOOGLE_REDIRECT_URI!;
+  const clientId = process.env.GOOGLE_CLIENT_ID!;
+
   const scope = [
     "openid",
     "email",
@@ -8,16 +11,16 @@ export async function GET() {
     "https://www.googleapis.com/auth/calendar.readonly",
   ].join(" ");
 
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
-    response_type: "code",
-    access_type: "offline",
-    prompt: "consent",
-    scope,
-  });
+  const url =
+    "https://accounts.google.com/o/oauth2/v2/auth?" +
+    new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirect,
+      response_type: "code",
+      access_type: "offline",
+      prompt: "consent",
+      scope,
+    }).toString();
 
-  return NextResponse.redirect(
-    "https://accounts.google.com/o/oauth2/v2/auth?" + params.toString()
-  );
+  return NextResponse.redirect(url);
 }

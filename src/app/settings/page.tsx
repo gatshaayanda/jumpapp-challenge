@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { Settings, Link, Clock } from 'lucide-react';
+import { Settings, Link, Clock, Calendar } from 'lucide-react';
 
 export default function SettingsPage() {
   const auth = getAuth();
@@ -59,6 +59,10 @@ export default function SettingsPage() {
   }
 
   // OAUTH CONNECTIONS
+  function connectGoogle() {
+    window.location.href = '/api/google/start';
+  }
+
   function connectLinkedIn() {
     if (!user) return;
     window.location.href = `/api/oauth/linkedin/start?uid=${user.uid}`;
@@ -81,6 +85,13 @@ export default function SettingsPage() {
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Link size={20} /> Connected Accounts
         </h2>
+
+        <button
+          className="w-full bg-[#4285F4] text-white px-4 py-3 rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
+          onClick={connectGoogle}
+        >
+          <Calendar size={18} /> Connect Google Calendar
+        </button>
 
         <button
           className="w-full bg-[#0077b5] text-white px-4 py-3 rounded-lg font-medium hover:opacity-90"

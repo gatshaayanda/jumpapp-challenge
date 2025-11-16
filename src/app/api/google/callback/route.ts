@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code");
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
 
   if (!code) {
     return NextResponse.json({ error: "Missing OAuth code" }, { status: 400 });
@@ -23,10 +23,16 @@ export async function GET(req: Request) {
   const tokens = await tokenRes.json();
 
   if (!tokens.access_token) {
-    return NextResponse.json({ error: "OAuth failed", tokens }, { status: 400 });
+    return NextResponse.json(
+      { error: "OAuth failed", tokens },
+      { status: 400 }
+    );
   }
 
-  const res = NextResponse.redirect("/events");
+  // Save cookie
+  const res = NextResponse.redirect(
+    new URL("/events", process.env.APP_BASE_URL || "http://localhost:3000")
+  );
 
   res.cookies.set("google_tokens", JSON.stringify({
     access_token: tokens.access_token,
