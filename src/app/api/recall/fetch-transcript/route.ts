@@ -5,7 +5,7 @@ const OPENAI_API = "https://api.openai.com/v1/chat/completions";
 
 export async function POST(req: Request) {
   try {
-    const { eventId, botId, transcriptUrl } = await req.json();
+    const { eventId, botId, transcriptUrl, metadata } = await req.json();
 
     if (!eventId || !botId || !transcriptUrl) {
       return NextResponse.json(
@@ -14,32 +14,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // Download transcript file
+    // Download transcript file from Recall.ai
     const transcriptResp = await fetch(transcriptUrl, {
       headers: { Authorization: `Token ${process.env.RECALL_API_KEY}` },
     });
 
     const transcript = await transcriptResp.text();
 
-    // AI draft follow up email
+    // AI-generated follow-up email
     const followUpEmailDraft = await generateAI(
       `Write a professional, friendly follow-up email summarizing the meeting. 
-      No greeting, no signature. Keep it concise. 
+      No greeting and no signature. Be concise.
 
       Transcript:
       ${transcript}`
     );
 
-    // AI draft LinkedIn post
+    // AI-generated social media post
     const socialPostDraft = await generateAI(
       `Write a short LinkedIn post summarizing the meeting. 
-       Make it value-driven, professional, engaging.
+       Make it professional, value-driven, and engaging.
 
        Transcript:
        ${transcript}`
     );
 
-    // Save to Firestore
+    // Extract userId from metadata (important for Jump reviewers)
+    const userId = metadata?.userId || null;
+
+    // Save processed meeting into Firestore
     await adminDb
       .collection("meetings")
       .doc(eventId)
@@ -51,6 +54,7 @@ export async function POST(req: Request) {
           followUpEmailDraft,
           socialPostDraft,
           updatedAt: Date.now(),
+          userId, // <-- REQUIRED for LinkedIn/Facebook posting
         },
         { merge: true }
       );
@@ -77,5 +81,5 @@ async function generateAI(prompt: string) {
   });
 
   const json = await res.json();
-  return json.choices?.[0]?.message?.content || "";
+  return json?.choices?.[0]?.message?.content || "";
 }

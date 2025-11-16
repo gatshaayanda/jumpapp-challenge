@@ -2,33 +2,40 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { meetingUrl, joinAt, userId, eventId } = await req.json();
+    const { joinUrl, startTime, userId, eventId } = await req.json();
 
-    if (!process.env.RECALL_API_KEY) {
-      throw new Error("Missing RECALL_API_KEY");
+    if (!joinUrl || !startTime || !userId || !eventId) {
+      return NextResponse.json(
+        { error: "Missing joinUrl, startTime, userId, or eventId" },
+        { status: 400 }
+      );
     }
+
+    if (!process.env.RECALL_API_KEY || !process.env.RECALL_REGION) {
+      throw new Error("Missing Recall environment variables");
+    }
+
+    // Convert your timestamp → ISO timestamp
+    const joinAtIso = new Date(startTime).toISOString();
 
     const res = await fetch(
       `https://${process.env.RECALL_REGION}.recall.ai/api/v1/bot`,
       {
         method: "POST",
         headers: {
-          "Authorization": `Token ${process.env.RECALL_API_KEY}`,
+          Authorization: `Token ${process.env.RECALL_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          meeting_url: meetingUrl,
-          join_at: new Date(joinAt).toISOString(),
+          meeting_url: joinUrl,
+          join_at: joinAtIso,
           bot_name: "Jump Challenge Notetaker",
-          metadata: {
-            userId,
-            eventId
-          },
+          metadata: { userId, eventId },
           recording_config: {
             transcript: {
               provider: { meeting_captions: {} },
-            }
-          }
+            },
+          },
         }),
       }
     );
