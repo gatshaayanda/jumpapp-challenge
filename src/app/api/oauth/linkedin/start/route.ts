@@ -1,19 +1,29 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { encodeState } from "@/utils/stateToken";
+import { requireUser } from "@/utils/serverAuth";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const uid = searchParams.get('uid'); // pass this from Settings page
+  const { uid } = await requireUser(req);
 
   const clientId = process.env.LINKEDIN_CLIENT_ID!;
+  const redirectBase =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    "http://localhost:3000";
   const redirect = encodeURIComponent(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/oauth/linkedin/callback`
+    `${redirectBase}/api/oauth/linkedin/callback`
   );
 
   const scope = encodeURIComponent(
-    "openid profile email w_member_social r_liteprofile r_emailaddress"
+    "openid profile email w_member_social r_liteprofile r_emailaddress offline_access"
   );
 
-  const state = uid || "missing_uid";
+  const state = encodeState({
+    uid,
+    provider: "linkedin",
+  });
 
   const url =
     `https://www.linkedin.com/oauth/v2/authorization` +

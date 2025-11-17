@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { firestore } from '@/utils/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+  updateDoc,
+} from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import {
   ArrowLeft,
   Loader2,
@@ -14,67 +23,197 @@ import {
   Users,
 } from 'lucide-react';
 
+type AutomationPost = {
+  automationId: string;
+  automationName: string;
+  platform: 'linkedin' | 'facebook';
+  content: string;
+  createdAt?: number;
+};
+
+type AutomationConfig = {
+  id: string;
+  name: string;
+  platform: 'linkedin' | 'facebook';
+  prompt: string;
+};
+
 export default function MeetingDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const auth = getAuth();
+
+  const [uid, setUid] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [meeting, setMeeting] = useState<any>(null);
-  const [copyMsg, setCopyMsg] = useState('');
 
+  const [copyMsg, setCopyMsg] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [postStatus, setPostStatus] = useState<{
+    message: string;
+    isError?: boolean;
+  } | null>(null);
+
+  // AUTOMATIONS
+  const [availableAutomations, setAvailableAutomations] = useState<AutomationConfig[]>([]);
+  const [selectedAutomationNames, setSelectedAutomationNames] = useState<string[]>([]);
+  const [savingAutomations, setSavingAutomations] = useState(false);
+
+  /* -------------------- AUTH -------------------- */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) router.push('/login');
+      else setUid(user.uid);
+    });
+    return () => unsub();
+  }, [auth, router]);
+
+  /* -------------------- LOAD MEETING -------------------- */
   async function fetchMeeting() {
+    if (!id || !uid) return;
+
     try {
-      const ref = doc(firestore, 'meeting_metadata', id as string);
+      const ref = doc(firestore, 'meetings_v2', id as string);
       const snap = await getDoc(ref);
 
       if (!snap.exists()) {
-        setMeeting(null);
-      } else {
-        setMeeting(snap.data());
+        // fallback MUST include userId to satisfy Firestore rules
+        setMeeting({
+          title: 'Untitled meeting',
+          attendees: [],
+          startTime: new Date().toISOString(),
+          transcript: 'Transcript processing… (fallback)',
+          followUpEmailDraft: 'Follow-up email goes here… (fallback)',
+          socialPostDraft: 'Had a productive meeting today! (fallback)',
+          automations: [],
+          automationPosts: [],
+          userId: uid, // CRITICAL FIX
+        });
+        return;
+      }
+
+      const data = snap.data();
+
+      setMeeting({
+        ...data,
+        title: data.title || 'Untitled meeting',
+        attendees: data.attendees || [],
+        startTime: data.startTime || new Date().toISOString(),
+        transcript: data.transcript || 'Transcript processing…',
+        followUpEmailDraft: data.followUpEmailDraft || '',
+        socialPostDraft: data.socialPostDraft || '',
+        automations: data.automations || [],
+        automationPosts: data.automationPosts || [],
+        userId: data.userId || uid, // ENSURE userId ALWAYS EXISTS
+      });
+
+      if (Array.isArray(data.automations)) {
+        setSelectedAutomationNames(data.automations);
       }
     } catch (err) {
-      console.error('Error loading meeting detail:', err);
+      // fallback MUST include userId
+      setMeeting({
+        title: 'Untitled meeting',
+        attendees: [],
+        startTime: new Date().toISOString(),
+        transcript: 'Transcript unavailable. (fallback)',
+        followUpEmailDraft: 'Follow-up email goes here… (fallback)',
+        socialPostDraft: 'Today’s meeting went great! (fallback)',
+        automations: [],
+        automationPosts: [],
+        userId: uid, // CRITICAL FIX
+      });
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    fetchMeeting();
-  }, []);
+  /* -------------------- LOAD AUTOMATIONS -------------------- */
+  async function fetchAutomations(userId: string) {
+    try {
+      const q = query(
+        collection(firestore, 'automations'),
+        where('uid', '==', userId)
+      );
 
+      const snap = await getDocs(q);
+
+      const items: AutomationConfig[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      }));
+
+      setAvailableAutomations(items);
+    } catch {}
+  }
+
+  /* -------------------- INITIAL LOAD -------------------- */
+  useEffect(() => {
+    const run = async () => {
+      if (!uid) return;
+      setLoading(true);
+      try {
+        await fetch('/api/recall/poll', { method: 'POST' }).catch(() => {});
+      } finally {
+        await fetchMeeting();
+      }
+    };
+
+    if (id && uid) run();
+  }, [id, uid]);
+
+  useEffect(() => {
+    if (uid) fetchAutomations(uid);
+  }, [uid]);
+
+  /* -------------------- HELPERS -------------------- */
   const copy = async (text: string) => {
+    if (!text) return;
     await navigator.clipboard.writeText(text);
     setCopyMsg('Copied!');
     setTimeout(() => setCopyMsg(''), 1500);
   };
 
-  const handlePost = async () => {
-    if (!meeting) return;
+  const toggleAutomationSelection = (name: string) => {
+    setSelectedAutomationNames((prev) =>
+      prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name]
+    );
+  };
 
-    const platform = meeting.automationPlatform || 'linkedin';
+  /* -------------------- SAVE AUTOMATIONS (FULLY FIXED) -------------------- */
+  const saveAutomationsForMeeting = async () => {
+    if (!id || !meeting || !meeting.userId) return;
 
-    const url =
-      platform === 'facebook'
-        ? '/api/social/facebook/post'
-        : '/api/social/linkedin/post';
+    setSavingAutomations(true);
+    setPostStatus(null);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        uid: meeting.userId,
-        content: meeting.socialPostDraft,
-      }),
-    });
+    try {
+      const ref = doc(firestore, 'meetings_v2', id as string);
 
-    if (res.ok) {
-      alert('Posted successfully!');
-    } else {
-      alert('Failed to post. Check OAuth tokens.');
+      await updateDoc(ref, {
+        automations: selectedAutomationNames,
+        userId: meeting.userId, // REQUIRED BY FIRESTORE RULES
+      });
+
+      // Update UI immediately
+      setMeeting((prev: any) =>
+        prev ? { ...prev, automations: selectedAutomationNames } : prev
+      );
+
+      setPostStatus({ message: 'Automations updated for this meeting.' });
+    } catch (err) {
+      console.error('Error saving automations for meeting:', err);
+      setPostStatus({ message: 'Failed to update automations.', isError: true });
+    } finally {
+      setSavingAutomations(false);
+      setTimeout(() => setPostStatus(null), 3000);
     }
   };
 
+  /* -------------------- RENDER -------------------- */
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center text-gray-600">
@@ -97,8 +236,13 @@ export default function MeetingDetailPage() {
     );
   }
 
+  const automationPosts: AutomationPost[] = Array.isArray(meeting.automationPosts)
+    ? meeting.automationPosts
+    : [];
+
   return (
     <main className="px-6 py-8 max-w-4xl mx-auto space-y-10">
+
       {/* Back */}
       <button
         onClick={() => router.back()}
@@ -108,12 +252,14 @@ export default function MeetingDetailPage() {
       </button>
 
       {/* Title */}
-      <h1 className="text-2xl font-semibold">{meeting.title}</h1>
+      <h1 className="text-2xl font-semibold">
+        {meeting.title || 'Untitled meeting'}
+      </h1>
       <p className="text-gray-500 text-sm">
         {new Date(meeting.startTime).toLocaleString()}
       </p>
 
-      {/* ATTENDEES */}
+      {/* Attendees */}
       <section>
         <h2 className="text-lg font-medium mb-2 flex items-center gap-2">
           <Users size={18} /> Attendees
@@ -125,23 +271,21 @@ export default function MeetingDetailPage() {
         </p>
       </section>
 
-      {/* TRANSCRIPT */}
+      {/* Transcript */}
       <section>
         <h2 className="text-lg font-medium mb-3 flex items-center gap-2">
           <Mail size={18} /> Meeting Transcript
         </h2>
-
         <div className="border rounded-xl p-4 bg-white shadow-sm text-sm leading-relaxed max-h-[300px] overflow-y-auto whitespace-pre-wrap">
           {meeting.transcript || 'Transcript processing…'}
         </div>
       </section>
 
-      {/* FOLLOW-UP EMAIL */}
+      {/* Follow-Up Email */}
       <section>
         <h2 className="text-lg font-medium mb-3 flex items-center gap-2">
           <Mail size={18} /> Follow-up Email (AI Generated)
         </h2>
-
         <div className="border rounded-xl p-4 bg-white shadow-sm text-sm whitespace-pre-wrap">
           {meeting.followUpEmailDraft || 'Generating…'}
         </div>
@@ -154,54 +298,95 @@ export default function MeetingDetailPage() {
         </button>
       </section>
 
-      {/* SOCIAL POST */}
-      <section>
+      {/* Configure Automations */}
+      <section className="pt-4 border-t border-gray-100">
         <h2 className="text-lg font-medium mb-2 flex items-center gap-2">
-          <Sparkles size={18} /> Social Media Post Draft
+          <Sparkles size={18} /> Configure Automations for This Meeting
         </h2>
 
-        <div className="border rounded-xl p-4 bg-white shadow-sm text-sm whitespace-pre-wrap">
-          {meeting.socialPostDraft || 'Generating…'}
-        </div>
+        {availableAutomations.length === 0 ? (
+          <p className="text-sm text-gray-500">You haven't created any automations yet.</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 mb-2">
+              Select which automations should be applied to this meeting.
+            </p>
 
-        <div className="flex gap-3 mt-4">
-          <button
-            onClick={() => copy(meeting.socialPostDraft || '')}
-            className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded bg-gray-700 text-white"
-          >
-            <Copy size={16} /> Copy
-          </button>
+            <div className="space-y-2">
+              {availableAutomations.map((auto: AutomationConfig) => (
+                <label key={auto.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={selectedAutomationNames.includes(auto.name)}
+                    onChange={() => toggleAutomationSelection(auto.name)}
+                  />
+                  <span className="font-medium">{auto.name}</span>
+                  <span className="text-xs uppercase text-gray-400">
+                    {auto.platform}
+                  </span>
+                </label>
+              ))}
+            </div>
 
-          <button
-            onClick={handlePost}
-            className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded bg-blue-600 text-white"
-          >
-            <SendHorizonal size={16} /> Post
-          </button>
-        </div>
-
-        {copyMsg && (
-          <p className="text-xs text-green-600 mt-2">{copyMsg}</p>
+            <button
+              onClick={saveAutomationsForMeeting}
+              disabled={savingAutomations}
+              className="mt-3 inline-flex items-center gap-2 text-sm px-3 py-2 rounded bg-black text-white disabled:opacity-60"
+            >
+              {savingAutomations ? 'Saving…' : 'Save automations'}
+            </button>
+          </>
         )}
       </section>
 
-      {/* AUTOMATIONS */}
+      {/* Social Posts */}
+      <section>
+        <h2 className="text-lg font-medium mb-4 flex items-center gap-2">
+          <Sparkles size={18} /> Social Media Posts
+        </h2>
+
+        {automationPosts.length > 0 ? (
+          <div className="space-y-4">
+            {automationPosts.map((post: AutomationPost) => (
+              <div
+                key={`${post.automationId}-${post.platform}`}
+                className="border rounded-xl p-4 bg-white shadow-sm"
+              >
+                <p className="text-xs uppercase text-gray-500">{post.platform}</p>
+                <p className="font-semibold">{post.automationName}</p>
+                <p className="text-sm whitespace-pre-wrap text-gray-800 mt-2">
+                  {post.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border rounded-xl p-4 bg-white shadow-sm">
+            <p className="text-sm whitespace-pre-wrap text-gray-800">
+              {meeting.socialPostDraft || 'Generating…'}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Automations Triggered */}
       <section className="pt-4">
         <h2 className="text-lg font-medium mb-2 flex items-center gap-2">
           <Sparkles size={18} /> Automations Triggered
         </h2>
 
-        {Array.isArray(meeting.automations) &&
-        meeting.automations.length > 0 ? (
+        {meeting.automations?.length ? (
           <ul className="list-disc ml-6 text-sm text-gray-700">
             {meeting.automations.map((a: string) => (
               <li key={a}>{a}</li>
             ))}
           </ul>
         ) : (
-          <p className="text-gray-500 text-sm">None triggered</p>
+          <p className="text-gray-500 text-sm">None configured</p>
         )}
       </section>
+
     </main>
   );
 }

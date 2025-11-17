@@ -1,6 +1,58 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { FieldValue } from "firebase-admin/firestore";
+import type { DocumentReference } from "firebase-admin/firestore";
+import { adminDb } from "@/utils/firebaseAdmin";
+import { requireUser } from "@/utils/serverAuth";
 
-async function refreshToken(refresh_token: string) {
+export const runtime = "nodejs";
+
+type AccountDoc = {
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  email?: string;
+  name?: string;
+};
+
+type RefreshResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error?: string;
+};
+
+type EntryPoint = {
+  uri?: string;
+  entryPointType?: string;
+  label?: string;
+};
+
+type GoogleApiEvent = {
+  id?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: EntryPoint[] } | null;
+  attendees?: { email?: string; displayName?: string }[];
+};
+
+type SanitizedEvent = {
+  id: string;
+  summary: string;
+  description: string | null;
+  location: string | null;
+  start: { dateTime: string | null; date: string | null };
+  end: { dateTime: string | null; date: string | null };
+  hangoutLink: string | null;
+  conferenceData: { entryPoints?: EntryPoint[] } | null;
+  attendees: { email?: string; displayName?: string }[];
+};
+
+async function refreshToken(refresh_token: string): Promise<RefreshResponse> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -12,89 +64,195 @@ async function refreshToken(refresh_token: string) {
     }),
   });
 
-  return res.json();
+  const json = (await res.json()) as RefreshResponse;
+  if (!res.ok) {
+    throw new Error(json?.error || "token_refresh_failed");
+  }
+  return json;
 }
 
-export async function GET(req: Request) {
-  try {
-    // Parse cookies
-    const cookieHeader = req.headers.get("cookie") || "";
-    const cookies = Object.fromEntries(
-      cookieHeader
-        .split(";")
-        .map((c) => c.trim().split("="))
-        .map(([k, ...v]) => [k, decodeURIComponent(v.join("="))])
-    );
+function sanitizeEvents(items: GoogleApiEvent[]): SanitizedEvent[] {
+  return items
+    .filter((ev) => {
+      const start = ev.start?.dateTime || ev.start?.date;
+      if (!start) return false;
+      const summary = (ev.summary || "").toLowerCase();
+      if (summary.includes("birthday")) return false;
+      if (summary.includes("holiday")) return false;
+      if (summary.includes("anniversary")) return false;
+      return true;
+    })
+    .map((e) => ({
+      id: e.id || randomUUID(),
+      summary: e.summary || "Untitled Event",
+      description: e.description ?? null,
+      location: e.location ?? null,
+      start: {
+        dateTime: e.start?.dateTime ?? null,
+        date: e.start?.date ?? null,
+      },
+      end: {
+        dateTime: e.end?.dateTime ?? null,
+        date: e.end?.date ?? null,
+      },
+      hangoutLink: e.hangoutLink ?? null,
+      conferenceData: e.conferenceData ?? null,
+      attendees: e.attendees ?? [],
+      conferenceData: e.conferenceData ?? null,
+      attendees: e.attendees ?? [],
+    }));
+}
 
-    if (!cookies.google_tokens) {
-      return NextResponse.json({ events: [] });
-    }
-
-    let tokens = JSON.parse(cookies.google_tokens);
-
-    // Refresh token if needed
-    if (Date.now() > tokens.expires_in - 5000) {
-      const refreshed = await refreshToken(tokens.refresh_token);
-      tokens.access_token = refreshed.access_token;
-      tokens.expires_in = Date.now() + refreshed.expires_in * 1000;
-    }
-
-    // Google Calendar fetch (next 2 years max)
-    const now = new Date().toISOString();
-    const maxTime = new Date("2027-01-01T00:00:00Z").toISOString(); // safe window
-
+async function fetchEventsForAccount(
+  accessToken: string,
+  timeMin: string,
+  timeMax: string
+): Promise<SanitizedEvent[]> {
     const params = new URLSearchParams({
-      timeMin: now,
-      timeMax: maxTime,
+      timeMin,
+      timeMax,
       singleEvents: "true",
       orderBy: "startTime",
       maxResults: "2500",
+      conferenceDataVersion: "1",
+      fields:
+        "items(" +
+        "id,summary,description,location," +
+        "start(dateTime,date),end(dateTime,date)," +
+        "hangoutLink," +
+        "conferenceData(entryPoints(uri,entryPointType,label))," +
+        "attendees(email,displayName)" +
+        ")",
     });
 
-    const googleRes = await fetch(
+  const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
       {
         headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         },
       }
     );
 
-    const data = await googleRes.json();
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `google_api_error:${res.status}:${text.slice(0, 200)}`
+    );
+  }
 
-    if (!data.items) {
-      console.log("Google returned:", data);
-      return NextResponse.json({ events: [] });
+  const data = await res.json();
+  const items: GoogleApiEvent[] = Array.isArray(data?.items) ? data.items : [];
+  return sanitizeEvents(items);
+}
+
+async function ensureAccessToken(
+  ref: DocumentReference,
+  doc: AccountDoc
+) {
+  const now = Date.now();
+  if (
+    doc.accessToken &&
+    typeof doc.expiresAt === "number" &&
+    doc.expiresAt - 5000 > now
+  ) {
+    return doc.accessToken;
+  }
+
+  if (!doc.refreshToken) {
+    throw new Error("missing_refresh_token");
+  }
+
+  const refreshed = await refreshToken(doc.refreshToken);
+  const expiresAt = now + Number(refreshed.expires_in ?? 3600) * 1000;
+  await ref.set(
+    {
+      accessToken: refreshed.access_token,
+      expiresAt,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return refreshed.access_token as string;
+}
+
+export async function GET(req: Request) {
+  try {
+    const { uid } = await requireUser(req);
+
+    const accountsSnap = await adminDb
+      .collection("users")
+      .doc(uid)
+      .collection("googleAccounts")
+      .get();
+
+    if (accountsSnap.empty) {
+      return NextResponse.json({ events: [], accounts: [] });
     }
 
-    // ----------------------------------------------------------------
-    // 🔥 FILTER OUT ALL-DAY + RECURRING BIRTHDAYS/HOLIDAYS
-    // ----------------------------------------------------------------
-    const cleaned = data.items.filter((ev: any) => {
-      // Must have a REAL dateTime (otherwise it's an all-day event)
-      if (!ev.start?.dateTime) return false;
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date("2027-01-01T00:00:00Z").toISOString();
 
-      // Exclude birthdays/anniversary/holidays/unknown junk
-      const summary = (ev.summary || "").toLowerCase();
-      if (summary.includes("birthday")) return false;
-      if (summary.includes("anniversary")) return false;
-      if (summary.includes("holiday")) return false;
+    const allEvents: (SanitizedEvent & {
+      accountId: string;
+      sourceEmail?: string;
+      internalId: string;
+    })[] = [];
+    const accountMeta: { accountId: string; email?: string; name?: string }[] =
+      [];
+    const errors: { accountId: string; message: string }[] = [];
 
-      return true;
-    });
+    for (const doc of accountsSnap.docs) {
+      const data = doc.data() as AccountDoc;
+      accountMeta.push({
+        accountId: doc.id,
+        email: data.email,
+        name: data.name,
+      });
 
-    // Map to clean format
-    const events = cleaned.map((e: any) => ({
-      id: e.id,
-      summary: e.summary || "Untitled Event",
-      start: { dateTime: e.start.dateTime },
-      hangoutLink: e.hangoutLink,
-      conferenceData: e.conferenceData,
-    }));
+      try {
+        const accessToken = await ensureAccessToken(doc.ref, data);
+        const events = await fetchEventsForAccount(
+          accessToken,
+          timeMin,
+          timeMax
+        );
+        allEvents.push(
+          ...events.map((ev) => ({
+            ...ev,
+            accountId: doc.id,
+            sourceEmail: data.email,
+            internalId: `${doc.id}:${ev.id}`,
+          }))
+        );
+      } catch (error) {
+        console.error("Google account sync failed", doc.id, error);
+        errors.push({
+          accountId: doc.id,
+          message:
+            error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+    }
 
-    return NextResponse.json({ events });
-  } catch (error: any) {
+    return NextResponse.json({ events: allEvents, accounts: accountMeta, errors });
+  } catch (error) {
+    const status =
+      error instanceof Error && error.message === "UNAUTHENTICATED"
+        ? 401
+        : 500;
+    if (status !== 401) {
     console.error("Google Events Error:", error);
-    return NextResponse.json({ events: [], error: error.message });
+    }
+    return NextResponse.json(
+      {
+        events: [],
+        accounts: [],
+        error:
+          error instanceof Error ? error.message : "unknown_error",
+      },
+      { status }
+    );
   }
 }

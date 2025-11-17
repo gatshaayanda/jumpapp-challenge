@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     }
 
     // Verify Firebase ID token from client
-    const decoded = await adminAuth.verifyIdToken(token);
+    await adminAuth.verifyIdToken(token);
 
     const res = NextResponse.json({ ok: true });
 

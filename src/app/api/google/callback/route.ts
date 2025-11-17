@@ -1,12 +1,54 @@
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/utils/firebaseAdmin";
+import { decodeState } from "@/utils/stateToken";
+
+type TokenResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  scope?: string;
+  error?: string;
+};
+
+type GoogleProfile = {
+  id: string;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  picture?: string;
+};
+
+type StoredAccountPayload = {
+  uid: string;
+  accountId: string;
+  email?: string;
+  name?: string;
+  picture?: string | null;
+  accessToken: string;
+  expiresAt: number;
+  scopes?: string;
+  updatedAt: FirebaseFirestore.FieldValue;
+  connectedAt: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp | null;
+  refreshToken?: string | null;
+};
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  try {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
+    const stateParam = url.searchParams.get("state");
 
-  if (!code) {
-    return NextResponse.json({ error: "Missing OAuth code" }, { status: 400 });
-  }
+    if (!code || !stateParam) {
+      return NextResponse.json(
+        { error: "Missing OAuth params" },
+        { status: 400 }
+      );
+    }
+
+    const { uid } = decodeState(stateParam);
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -20,30 +62,88 @@ export async function GET(req: Request) {
     }),
   });
 
-  const tokens = await tokenRes.json();
+    const tokens = (await tokenRes.json()) as TokenResponse;
 
-  if (!tokens.access_token) {
+    if (!tokenRes.ok || !tokens.access_token) {
     return NextResponse.json(
-      { error: "OAuth failed", tokens },
+        { error: "OAuth failed", detail: tokens },
       { status: 400 }
     );
   }
 
-  // Save cookie
-  const res = NextResponse.redirect(
-    new URL("/events", process.env.APP_BASE_URL || "http://localhost:3000")
-  );
+    const accessToken: string = tokens.access_token;
+    const refreshToken: string | undefined = tokens.refresh_token;
+    const expiresAt =
+      Date.now() + (Number(tokens.expires_in || 3600) * 1000);
 
-  res.cookies.set("google_tokens", JSON.stringify({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_in: Date.now() + tokens.expires_in * 1000,
-  }), {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-  });
+    // Get profile info for account metadata
+    const profileRes = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    const profile = (await profileRes.json()) as Partial<GoogleProfile>;
 
-  return res;
+    if (!profile?.id) {
+      return NextResponse.json(
+        { error: "Failed to fetch Google profile", detail: profile },
+        { status: 400 }
+      );
+    }
+
+    const accountId = profile.id as string;
+
+    const docRef = adminDb
+      .collection("users")
+      .doc(uid)
+      .collection("googleAccounts")
+      .doc(accountId);
+
+    const existing = await docRef.get();
+
+    const connectedAtValue =
+      existing.exists && existing.data()?.connectedAt
+        ? (existing.data()?.connectedAt as
+            | FirebaseFirestore.Timestamp
+            | null)
+        : FieldValue.serverTimestamp();
+
+    const payload: StoredAccountPayload = {
+      uid,
+      accountId,
+      email: profile.email,
+      name: profile.name ?? profile.given_name ?? profile.email,
+      picture: profile.picture ?? null,
+      accessToken,
+      expiresAt,
+      scopes: tokens.scope,
+      updatedAt: FieldValue.serverTimestamp(),
+      connectedAt: connectedAtValue,
+      refreshToken: existing.data()?.refreshToken ?? null,
+    };
+
+    if (refreshToken) {
+      payload.refreshToken = refreshToken;
+    } else if (!existing.exists) {
+      payload.refreshToken = null;
+    }
+
+    await docRef.set(payload, { merge: true });
+
+    const base =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      process.env.APP_BASE_URL ||
+      "http://localhost:3000";
+    return NextResponse.redirect(`${base}/settings?google=connected`);
+  } catch (error) {
+    console.error("Google callback error", error);
+    return NextResponse.json(
+      {
+        error: "OAuth callback failed",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
 }

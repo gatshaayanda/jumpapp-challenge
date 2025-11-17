@@ -1,3 +1,4 @@
+// src/app/meetings/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -28,7 +29,6 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
 
-  // Helpers
   const platformLabel = (p: Meeting['platform']) => {
     switch (p) {
       case 'zoom':
@@ -55,7 +55,7 @@ export default function MeetingsPage() {
     }
   };
 
-  // Load current user + meetings
+  // Load current user + trigger poll + load meetings
   useEffect(() => {
     const auth = getAuth();
 
@@ -66,7 +66,17 @@ export default function MeetingsPage() {
       }
 
       setUserId(u.uid);
+      setLoading(true);
+
       try {
+        // 🔸 1) Trigger Recall polling so transcripts/social posts are ingested
+        await fetch('/api/recall/poll', {
+          method: 'POST',
+        }).catch((err) => {
+          console.warn('poll error (ignored in UI):', err);
+        });
+
+        // 🔸 2) Load meetings for this user
         const q = query(
           collection(firestore, 'meeting_metadata'),
           where('userId', '==', u.uid),
@@ -129,7 +139,9 @@ export default function MeetingsPage() {
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <h2 className="font-medium text-base">{m.title}</h2>
+                <h2 className="font-medium text-base text-white !text-white">
+                  {m.title}
+                </h2>
                 {m.transcriptReady && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                     Transcript ready

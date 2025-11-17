@@ -2,17 +2,30 @@
 
 import { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { Settings, Link, Clock, Calendar } from 'lucide-react';
+import { Settings, Link, Clock, Calendar, CheckCircle2 } from 'lucide-react';
+
+type ConnectionState = {
+  linkedin?: {
+    name: string | null;
+    connectedAt: string | null;
+  } | null;
+  facebook?: {
+    pageName: string | null;
+    connectedAt: string | null;
+  } | null;
+};
 
 export default function SettingsPage() {
   const auth = getAuth();
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [joinMinutes, setJoinMinutes] = useState(5);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
+  const [connections, setConnections] = useState<ConnectionState>({});
 
   // LOAD USER + SETTINGS
   useEffect(() => {
@@ -23,17 +36,32 @@ export default function SettingsPage() {
       }
 
       setUser(u);
+      ensureServerSession(u);
       loadSettings(u);
     });
-  }, []);
+  }, [auth, router]);
 
-  async function loadSettings(u: any) {
+  async function loadSettings(u: User) {
     try {
       const res = await fetch(`/api/user/settings?uid=${u.uid}`);
       const data = await res.json();
       if (data.joinMinutes) setJoinMinutes(data.joinMinutes);
+      if (data.connections) setConnections(data.connections);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function ensureServerSession(u: User) {
+    try {
+      const token = await u.getIdToken();
+      await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+    } catch (err) {
+      console.error('Failed to sync server session', err);
     }
   }
 
@@ -65,12 +93,12 @@ export default function SettingsPage() {
 
   function connectLinkedIn() {
     if (!user) return;
-    window.location.href = `/api/oauth/linkedin/start?uid=${user.uid}`;
+    window.location.href = `/api/oauth/linkedin/start`;
   }
 
   function connectFacebook() {
     if (!user) return;
-    window.location.href = `/api/oauth/facebook/start?uid=${user.uid}`;
+    window.location.href = `/api/oauth/facebook/start`;
   }
 
   return (
@@ -97,15 +125,31 @@ export default function SettingsPage() {
           className="w-full bg-[#0077b5] text-white px-4 py-3 rounded-lg font-medium hover:opacity-90"
           onClick={connectLinkedIn}
         >
-          Connect LinkedIn
+          {connections.linkedin ? 'LinkedIn Connected' : 'Connect LinkedIn'}
         </button>
+        {connections.linkedin && (
+          <p className="text-xs text-green-700 flex items-center gap-1">
+            <CheckCircle2 size={14} />
+            {connections.linkedin.name || 'LinkedIn profile'} connected
+            {connections.linkedin.connectedAt &&
+              ` (${new Date(connections.linkedin.connectedAt).toLocaleDateString()})`}
+          </p>
+        )}
 
         <button
           className="w-full bg-[#1877f2] text-white px-4 py-3 rounded-lg font-medium hover:opacity-90"
           onClick={connectFacebook}
         >
-          Connect Facebook
+          {connections.facebook ? 'Facebook Page Connected' : 'Connect Facebook'}
         </button>
+        {connections.facebook && (
+          <p className="text-xs text-green-700 flex items-center gap-1">
+            <CheckCircle2 size={14} />
+            {connections.facebook.pageName || 'Facebook page'} connected
+            {connections.facebook.connectedAt &&
+              ` (${new Date(connections.facebook.connectedAt).toLocaleDateString()})`}
+          </p>
+        )}
       </section>
 
       {/* Bot Join Timing */}

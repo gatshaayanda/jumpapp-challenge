@@ -2,107 +2,136 @@
 
 import { useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/Switch';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
 import { firestore } from '@/utils/firebaseConfig';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { Calendar, Loader2 } from 'lucide-react';
+import { Calendar, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  extractJoinUrl,
+  detectPlatform,
+  type CalendarEventForLinks,
+} from '@/utils/meetingLinks';
 
-type GEvent = {
-  id: string;
-  summary: string;
-  start: { dateTime: string };
-  hangoutLink?: string;
-  conferenceData?: any;
+type CalendarAttendee = {
+  email?: string;
+  displayName?: string;
 };
 
+type GEvent = CalendarEventForLinks & {
+  id: string;
+  internalId: string;
+  accountId: string;
+  sourceEmail?: string;
+  start: { dateTime?: string; date?: string };
+  attendees?: CalendarAttendee[];
+};
+
+type EventsResponse = {
+  events?: GEvent[];
+  errors?: { accountId: string; message: string }[];
+};
+
+/* -------------------------------------------------------------
+   COMPONENT
+-------------------------------------------------------------- */
 export default function EventsPage() {
   const [events, setEvents] = useState<GEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<{ accountId: string; message: string }[]>([]);
 
-  // PLATFORM DETECTION
-  const getPlatform = (e: GEvent) => {
-    const link =
-      e.hangoutLink ||
-      e.conferenceData?.entryPoints?.[0]?.uri ||
-      '';
-
-    if (link.includes('zoom')) return 'zoom';
-    if (link.includes('google')) return 'meet';
-    if (link.includes('teams')) return 'teams';
-    return 'unknown';
-  };
-
-  // LOAD USER + EVENTS
   useEffect(() => {
     const auth = getAuth();
     return onAuthStateChanged(auth, async (u) => {
       if (!u) return;
-
       setUserId(u.uid);
 
       try {
-        // Load Google Calendar events
-        const res = await fetch('/api/google/events');
-        const json = await res.json();
-        setEvents(json.events || []);
+        await syncServerSession(u);
+        const token = await u.getIdToken();
 
-        // Load toggle states
+        const res = await fetch('/api/google/events', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const json: EventsResponse = await res.json();
+
+        // Expect the server to include description/location/conferenceData.
+        setEvents(json.events || []);
+        setErrors(json.errors || []);
+
+        // Load toggle state from Firestore
         const userDoc = await getDoc(doc(firestore, 'users', u.uid));
         if (userDoc.exists()) {
           setToggles(userDoc.data().eventToggles || {});
         }
       } catch (e) {
         console.error('Error loading events:', e);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
   }, []);
 
-  // HANDLE TOGGLE
-  const onToggle = async (eventId: string, value: boolean) => {
-    setToggles((prev) => ({ ...prev, [eventId]: value }));
+  async function syncServerSession(u: User) {
+    try {
+      const token = await u.getIdToken();
+      await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+    } catch (err) {
+      console.error('Failed to sync server session', err);
+    }
+  }
+
+  const onToggle = async (eventKey: string, value: boolean) => {
     if (!userId) return;
 
-    // Save toggle in Firestore
-    await setDoc(
-      doc(firestore, 'users', userId),
-      { eventToggles: { ...toggles, [eventId]: value } },
-      { merge: true }
-    );
+    // Fix: use the computed next state to avoid stale closure in setDoc payload
+    const next = { ...toggles, [eventKey]: value };
+    setToggles(next);
 
-    // ---- RECALL.AI BOT CREATION ----
+    await setDoc(doc(firestore, 'users', userId), { eventToggles: next }, { merge: true });
+
     if (value === true) {
-      const event = events.find((e) => e.id === eventId);
+      const event = events.find((e) => e.internalId === eventKey);
       if (!event) return;
 
-      const platformLink =
-        event.hangoutLink ||
-        event.conferenceData?.entryPoints?.[0]?.uri ||
-        '';
-
-      if (!platformLink) {
-        console.warn('No join link found for event', eventId);
+      const joinUrl = extractJoinUrl(event);
+      if (!joinUrl) {
+        console.warn('No join link found for event:', event);
         return;
       }
 
-      // Call backend to create Recall AI bot
+      const startRaw = event.start?.dateTime || event.start?.date;
+
+      // Fire and forget; server should handle lead-time & idempotency
+      const attendeeList =
+        event.attendees
+          ?.map((a) => a.email || a.displayName || '')
+          .filter(Boolean) ?? [];
+
       await fetch('/api/recall/create-bot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          uid: userId,
-          eventId,
-          joinUrl: platformLink,
-          startTime: new Date(event.start.dateTime).getTime(),
+          userId,
+          eventId: event.internalId,
+          joinUrl,
+          startTime: startRaw,
+          sourceEmail: event.sourceEmail,
+          accountId: event.accountId,
+          summary: event.summary,
+          attendees: attendeeList,
         }),
       });
     }
   };
 
-  // RENDER
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen text-gray-600">
@@ -121,30 +150,60 @@ export default function EventsPage() {
         <p className="text-gray-600">No upcoming events found.</p>
       )}
 
+      {errors.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex gap-2 items-start">
+          <AlertTriangle size={16} className="mt-0.5" />
+          <div>
+            <p className="font-medium">Some calendars could not be synced:</p>
+            <ul className="list-disc ml-5">
+              {errors.map((err) => (
+                <li key={err.accountId}>
+                  {err.accountId}: {err.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-4">
         {events.map((ev) => {
-          const platform = getPlatform(ev);
-          const start = new Date(ev.start.dateTime).toLocaleString();
+          const joinUrl = extractJoinUrl(ev);
+          const platform = detectPlatform(joinUrl);
+
+          const raw = ev.start?.dateTime || ev.start?.date;
+          const start = raw ? new Date(raw).toLocaleString() : 'No date';
 
           return (
             <div
-              key={ev.id}
+              key={ev.internalId}
               className="border rounded-lg p-4 bg-white shadow-sm flex items-center justify-between"
             >
               <div>
                 <h2 className="font-medium text-lg">{ev.summary}</h2>
                 <p className="text-sm text-gray-600">{start}</p>
+                {ev.sourceEmail && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {ev.sourceEmail}
+                  </p>
+                )}
+
                 <p className="text-xs text-gray-400 mt-1">
                   {platform === 'zoom' && 'Zoom meeting'}
                   {platform === 'meet' && 'Google Meet'}
                   {platform === 'teams' && 'Microsoft Teams'}
                   {platform === 'unknown' && 'No conference link detected'}
                 </p>
+
+                {/* Show extracted link (debug) */}
+                {joinUrl && (
+                  <p className="text-xs text-blue-600 break-all mt-2">{joinUrl}</p>
+                )}
               </div>
 
               <Switch
-                checked={!!toggles[ev.id]}
-                onCheckedChange={(v) => onToggle(ev.id, v)}
+                checked={!!toggles[ev.internalId]}
+                onCheckedChange={(v) => onToggle(ev.internalId, v)}
               />
             </div>
           );

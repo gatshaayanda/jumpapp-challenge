@@ -30,7 +30,7 @@ export default function HomePage() {
             <div className="flex flex-wrap gap-3 pt-2">
               <Link
                 href="/dashboard"
-                className="px-5 py-2.5 rounded-full  text-white text-sm font-semibold hover:opacity-85 transition"
+                className="px-5 py-2.5 rounded-full text-white text-sm font-semibold hover:opacity-85 transition"
               >
                 Open dashboard
               </Link>
@@ -46,26 +46,47 @@ export default function HomePage() {
               Once you’re signed in, connect your Google Calendar, choose which
               meetings should have a notetaker, and we’ll handle the rest.
             </p>
+
+            {/* 🚀 NEW: Test User Instructions */}
+            <div className="mt-6 p-4 border rounded-xl bg-[--surface] text-sm leading-relaxed">
+              <p className="font-semibold mb-1">Instructions for the Test User</p>
+              <p className="text-[--accent-muted]">
+                This prototype includes a test account:{" "}
+                <span className="font-medium text-[--foreground]">
+                  webshookeng@gmail.com
+                </span>
+                .  
+                To understand how to use this app, follow the setup and usage
+                instructions provided in the project README on GitHub.
+              </p>
+
+              <Link
+                href="https://github.com/gatshaayanda/jumpapp-challenge"
+                target="_blank"
+                className="inline-block mt-3 text-xs underline hover:opacity-80"
+              >
+                View the README on GitHub →
+              </Link>
+            </div>
+            {/* END Instructions */}
           </div>
 
           {/* Right: how it works */}
           <div className="w-full md:max-w-sm">
             <div className="card">
-              <h2 className="text-base font-semibold mb-3">
-                How it works
-              </h2>
+              <h2 className="text-base font-semibold mb-3">How it works</h2>
               <ol className="space-y-3 text-sm">
                 <li>
-                  <span className="font-semibold">1. Connect Google Calendar.</span>{' '}
+                  <span className="font-semibold">1. Connect Google Calendar.</span>{" "}
                   We pull in meetings from all connected accounts.
                 </li>
                 <li>
-                  <span className="font-semibold">2. Send a notetaker.</span>{' '}
+                  <span className="font-semibold">2. Send a notetaker.</span>{" "}
                   Toggle which meetings should have a Recall.ai bot join a few minutes
                   before they start.
                 </li>
                 <li>
-                  <span className="font-semibold">3. Generate & post.</span>{' '}
+                  <span className="font-semibold">3. Generate & post.</span>{" "}
                   After the meeting, view the transcript, follow-up email draft,
                   and social post suggestions — then copy or post directly.
                 </li>
@@ -116,7 +137,7 @@ export default function HomePage() {
             transcripts, and social post generation.
           </p>
           <p>
-            Ready?{' '}
+            Ready?{" "}
             <Link href="/login" className="underline hover:opacity-80">
               Log in and connect your calendar
             </Link>

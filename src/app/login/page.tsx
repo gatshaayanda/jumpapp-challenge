@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { Loader2, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +20,15 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      const current = auth.currentUser;
+      if (current) {
+        const token = await current.getIdToken();
+        await fetch('/api/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+      }
       router.push('/events');
     } catch (err) {
       console.error('Login failed:', err);
