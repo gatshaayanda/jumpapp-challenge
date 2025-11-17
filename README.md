@@ -1,5 +1,7 @@
 # 🚀 Jump Challenge — Post-Meeting Social Media Generator  
 **Submission by Ayanda (AdminHub Systems)**
+**Loom Demo Video**
+https://www.loom.com/share/02b0bcd920ad412d9654f19bc4496120 
 
 This app fulfills the **November 14, 2025 Jump Technical Challenge** by implementing a complete end-to-end **“Post-meeting social media content generator”** using Google Calendar, Recall.ai, Firebase, and OpenAI. I built it on top of code I developed for a company I founded called AdminHub. The code is meant to help me develop and produce apps fast and efficiently, it works as a template to build on as noted in my Portfolio and CV. Utilizing AI, a person with sufficient knowledge can use the template to build a variety of sites and I have used my experience and expertise to resolve the issues in this challenge as best as I could.  
 
